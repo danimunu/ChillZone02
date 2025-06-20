@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Price Guessing Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+
+        #game-container {
+            text-align: center;
+        }
+
+        #color-display {
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+            border-radius: 10px;
+            border: 2px solid black;
+        }
+
+        #guess-input {
+            font-size: 16px;
+            padding: 10px;
+            width: 180px;
+        }
+
+        #submit-guess {
+            font-size: 16px;
+            padding: 10px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        #start-game,
+        #high-score {
+            font-size: 16px;
+            padding: 10px;
+            margin: 10px;
+            cursor: pointer;
+        }
+
+        #result {
+            font-size: 18px;
+            margin-top: 20px;
+        }
+
+        #instructions {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        #high-score-display {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <h1>Price Guessing Game</h1>
+        <p id="instructions">Instructions: Guess the price ($) of the displayed color. You have 5 rounds. Each guess
+            affects your final score based on how close your guess is to the actual price.</p>
+        <div id="color-display"></div>
+        <input type="number" step="0.00001" id="guess-input" placeholder="Enter your guess ($)">
+        <button id="submit-guess">Submit Guess</button>
+        <div id="result"></div>
+        <button id="start-game">Start New Game</button>
+        <button id="high-score">High Score</button>
+        <p id="high-score-display"></p>
+    </div>
+
+    <script>
+        // Function to convert hex color to RGB
+        function hexToRgb(hex) {
+            const bigint = parseInt(hex, 16);
+            return [
+                (bigint >> 16) & 255,
+                (bigint >> 8) & 255,
+                bigint & 255
+            ];
+        }
+
+        // Function to convert RGB to hex color
+        function rgbToHex([r, g, b]) {
+            return ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        // Function to linearly interpolate between two values
+        function lerp(start, end, t) {
+            return start + (end - start) * t;
+        }
+
+        // Function to interpolate between two colors based on a parameter t
+        function lerpColor(colorA, colorB, t) {
+            return [
+                Math.round(lerp(colorA[0], colorB[0], t)),
+                Math.round(lerp(colorA[1], colorB[1], t)),
+                Math.round(lerp(colorA[2], colorB[2], t))
+            ];
+        }
+
+        // Data points for colors and their corresponding prices
+        const dataPoints = [
+            { price: 0.00001, color: "262626" },
+            { price: 0.0005, color: "3A2323" },
+            { price: 0.01, color: "521E1E" },
+            { price: 0.05, color: "691A1A" },
+            { price: 0.10, color: "7B1616" },
+            { price: 0.20, color: "821515" },
+            { price: 0.30, color: "871414" },
+            { price: 0.50, color: "8D1313" },
+            { price: 0.85, color: "981111" },
+            { price: 1.00, color: "9E1111" }
+        ];
+
+        // Function to compute the color based on price
+        function getPriceColor(price) {
+            // Clamp the price to the range of the data points
+            price = Math.max(0.00001, Math.min(1.00, price));
+
+            // Find the range between which the price falls
+            for (let i = 0; i < dataPoints.length - 1; i++) {
+                const startPoint = dataPoints[i];
+                const endPoint = dataPoints[i + 1];
+
+                if (price >= startPoint.price && price <= endPoint.price) {
+                    // Normalize price between start and end points
+                    const t = (price - startPoint.price) / (endPoint.price - startPoint.price);
+
+                    // Convert colors to RGB
+                    const colorA = hexToRgb(startPoint.color);
+                    const colorB = hexToRgb(endPoint.color);
+
+                    // Interpolate between the two colors
+                    const interpolatedColor = lerpColor(colorA, colorB, t);
+
+                    // Convert back to hex and return
+                    return rgbToHex(interpolatedColor);
+                }
+            }
+
+            // Default color (should not reach here)
+            return "262626";
+        }
+
+        // Game variables
+        let currentRound = 0;
+        const totalRounds = 5;
+        let score = 0;
+        let highScore = localStorage.getItem("highScore") || 0;
+        let currentPrice = 0;
+
+        // Get DOM elements
+        const colorDisplay = document.getElementById("color-display");
+        const guessInput = document.getElementById("guess-input");
+        const resultDisplay = document.getElementById("result");
+        const highScoreDisplay = document.getElementById("high-score-display");
+
+        // Function to start a new game
+        function startGame() {
+            currentRound = 0;
+            score = 0;
+            resultDisplay.textContent = "";
+            guessInput.value = "";
+            generateNewRound();
+        }
+
+        // Function to generate a biased random price
+        function generateBiasedPrice() {
+            const base = Math.random() ** 4;
+            return (base * (1.00 - 0.00001) + 0.00001).toFixed(5);
+        }
+
+        // Function to generate a new round
+        function generateNewRound() {
+            currentPrice = generateBiasedPrice();
+            const color = getPriceColor(parseFloat(currentPrice));
+            colorDisplay.style.backgroundColor = `#${color}`;
+            currentRound++;
+        }
+
+        // Function to handle guess submission
+        function submitGuess() {
+            const userGuess = parseFloat(guessInput.value);
+            const guessError = Math.abs(userGuess - parseFloat(currentPrice));
+            const roundScore = Math.max(0, 1 - guessError);
+            score += roundScore;
+            resultDisplay.textContent = `Round ${currentRound}: Your Guess: $${userGuess.toFixed(5)}, Actual: $${currentPrice}, Score: ${roundScore.toFixed(2)}`;
+
+            if (currentRound < totalRounds) {
+                generateNewRound();
+            } else {
+                const finalScore = (score / totalRounds * 100).toFixed(2);
+                resultDisplay.textContent += `\n\nFinal Score: ${finalScore}%`;
+
+                // Update high score
+                if (finalScore > highScore) {
+                    highScore = finalScore;
+                    localStorage.setItem("highScore", highScore);
+                    highScoreDisplay.textContent = `New High Score: ${highScore}%`;
+                }
+            }
+
+            guessInput.value = "";
+        }
+
+        // Display high score
+        highScoreDisplay.textContent = `High Score: ${highScore}%`;
+
+        // Set up event listeners
+        document.getElementById("submit-guess").addEventListener("click", submitGuess);
+        document.getElementById("start-game").addEventListener("click", startGame);
+        document.getElementById("high-score").addEventListener("click", () => {
+            highScoreDisplay.textContent = `High Score: ${highScore}%`;
+        });
+
+        // Start a new game on page load
+        startGame();
+    </script>
+
+</body>
+
+</html>
